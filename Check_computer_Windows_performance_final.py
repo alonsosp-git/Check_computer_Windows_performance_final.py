@@ -1277,10 +1277,15 @@ with st.sidebar:
     st.divider()
     
     # Theme selection
+    previous_theme = st.session_state.get("app_theme", "Light")
     theme = st.selectbox("🎨 Theme", ["Light", "Dark", "Auto"],
-                         index=["Light", "Dark", "Auto"].index(
-                             st.session_state.get("app_theme", "Light")))
-    st.session_state["app_theme"] = theme
+                         index=["Light", "Dark", "Auto"].index(previous_theme),
+                         key="theme_selector")
+    
+    # Trigger rerun when theme changes (fixes single-click theme switching)
+    if theme != previous_theme:
+        st.session_state["app_theme"] = theme
+        st.rerun()
     
     # Data logging
     st.subheader("📊 Data Logging")
@@ -2452,7 +2457,67 @@ with tabs[8]:
                 )
         else:
             st.info("Temperature sensors not available")
-            st.caption("Install OpenHardwareMonitor or enable WMI access")
+            
+            # Check if WMI is available and try to install it
+            try:
+                import wmi
+                wmi_available = True
+            except ImportError:
+                wmi_available = False
+            
+            if not wmi_available:
+                if st.button("🚀 Auto-Install WMI Module", key="btn_auto_install_wmi"):
+                    with st.spinner("Installing WMI module..."):
+                        try:
+                            import subprocess
+                            import sys
+                            
+                            st.info("Installing WMI and dependencies...")
+                            result = subprocess.run(
+                                [sys.executable, "-m", "pip", "install", "wmi", "pywin32", "--user"],
+                                capture_output=True,
+                                text=True,
+                                timeout=180
+                            )
+                            
+                            if result.returncode == 0:
+                                st.success("✅ WMI installed successfully!")
+                                st.info("🔄 Refreshing page...")
+                                time.sleep(2)
+                                st.rerun()
+                            else:
+                                st.warning("Standard installation had issues, trying alternative...")
+                                alt_result = subprocess.run(
+                                    ["pip", "install", "wmi", "pywin32", "--user"],
+                                    capture_output=True,
+                                    text=True,
+                                    timeout=180
+                                )
+                                if alt_result.returncode == 0:
+                                    st.success("✅ WMI installed!")
+                                    time.sleep(2)
+                                    st.rerun()
+                        except Exception as e:
+                            st.error(f"Installation error: {str(e)}")
+            
+            st.caption("💡 Best option: Install OpenHardwareMonitor for full sensor access")
+            with st.expander("📋 OpenHardwareMonitor Setup (Recommended)"):
+                st.markdown("""
+                **Why OpenHardwareMonitor is better:**
+                - ✅ Works with ALL hardware (not just specific sensors)
+                - ✅ No installation needed (portable app)
+                - ✅ Shows CPU, GPU, motherboard temperatures
+                - ✅ Fan speeds, voltages, and more
+                
+                **Quick Setup:**
+                1. Download from: [openhardwaremonitor.org](https://openhardwaremonitor.org/)
+                2. Extract the ZIP file
+                3. Run `OpenHardwareMonitor.exe` as Administrator
+                4. Keep it running in the background
+                5. Refresh this page
+                
+                ✅ All sensors will appear automatically!
+                """)
     
     with hw_col2:
         st.subheader("GPU Status")
@@ -2466,18 +2531,133 @@ with tabs[8]:
                 st.caption(f"Memory: {gpu['memory_used']:.0f}MB / {gpu['memory_total']:.0f}MB")
         else:
             st.info("GPU not detected")
-            st.caption("Install GPUtil: pip install gputil")
+            
+            # Auto-installer for GPUtil
+            if not GPU_AVAILABLE:
+                st.warning("⚠️ GPUtil module not installed")
+                if st.button("🚀 Auto-Install GPUtil (one click)", key="btn_auto_install_gputil"):
+                    with st.spinner("Installing GPUtil module..."):
+                        try:
+                            import subprocess
+                            import sys
+                            
+                            # First, ensure pip is available
+                            try:
+                                import pip
+                            except ImportError:
+                                st.info("Installing pip first...")
+                                subprocess.check_call([sys.executable, "-m", "ensurepip", "--default-pip"])
+                            
+                            # Now install GPUtil
+                            st.info("Installing GPUtil...")
+                            result = subprocess.run(
+                                [sys.executable, "-m", "pip", "install", "gputil", "--user"],
+                                capture_output=True,
+                                text=True,
+                                timeout=120
+                            )
+                            
+                            if result.returncode == 0:
+                                st.success("✅ GPUtil installed successfully!")
+                                st.info("🔄 Refreshing page to load GPUtil...")
+                                time.sleep(2)
+                                st.rerun()
+                            else:
+                                st.error(f"Installation failed: {result.stderr}")
+                                # Try alternative method
+                                st.info("Trying alternative installation method...")
+                                alt_result = subprocess.run(
+                                    ["pip", "install", "gputil", "--user"],
+                                    capture_output=True,
+                                    text=True,
+                                    timeout=120
+                                )
+                                if alt_result.returncode == 0:
+                                    st.success("✅ GPUtil installed successfully!")
+                                    st.info("🔄 Refreshing page...")
+                                    time.sleep(2)
+                                    st.rerun()
+                                else:
+                                    st.error("Both installation methods failed. Please install manually: pip install gputil")
+                        except subprocess.TimeoutExpired:
+                            st.error("Installation timed out. Please try again or install manually.")
+                        except Exception as e:
+                            st.error(f"Installation error: {str(e)}")
+                            st.code("Manual install: pip install gputil")
+            else:
+                st.caption("✅ GPUtil installed, but no NVIDIA GPU detected")
+                st.caption("Note: GPUtil only supports NVIDIA GPUs")
+                st.caption("If you have AMD/Intel GPU, it won't be detected")
     
     with hw_col3:
         st.subheader("System Fans")
-        st.info("Fan speed monitoring")
-        st.caption("Requires OpenHardwareMonitor integration")
         
-        # CPU frequency as alternative
+        # Try to get fan speeds from OpenHardwareMonitor if available
+        fan_speeds = []
+        try:
+            import wmi
+            w = wmi.WMI(namespace="root\\OpenHardwareMonitor")
+            sensors = w.Sensor()
+            fan_speeds = [s for s in sensors if s.SensorType == 'Fan']
+        except:
+            pass
+        
+        if fan_speeds:
+            for fan in fan_speeds:
+                st.metric(f"🌀 {fan.Name}", f"{fan.Value:.0f} RPM")
+        else:
+            st.info("Fan speed monitoring")
+            st.caption("💡 Install OpenHardwareMonitor to see fan speeds")
+        
+        st.divider()
+        
+        # CPU frequency (always available)
         cpu_freq = psutil.cpu_freq()
         if cpu_freq:
-            st.metric("CPU Frequency", f"{cpu_freq.current:.0f} MHz")
+            st.metric("⚡ CPU Frequency", f"{cpu_freq.current:.0f} MHz")
             st.caption(f"Min: {cpu_freq.min:.0f} MHz | Max: {cpu_freq.max:.0f} MHz")
+    
+    st.divider()
+    
+    # Installation status check
+    st.subheader("🔍 Hardware Monitoring Status")
+    status_col1, status_col2, status_col3 = st.columns(3)
+    
+    with status_col1:
+        st.write("**GPUtil Module:**")
+        if GPU_AVAILABLE:
+            st.success("✅ Installed")
+        else:
+            st.warning("⚠️ Not installed")
+            st.caption("Click auto-install button above ↑")
+    
+    with status_col2:
+        st.write("**WMI Module:**")
+        try:
+            import wmi
+            st.success("✅ Installed")
+        except ImportError:
+            st.warning("⚠️ Not installed")
+            st.caption("Click auto-install button above ↑")
+    
+    with status_col3:
+        st.write("**OpenHardwareMonitor:**")
+        ohm_running = False
+        sensor_count = 0
+        try:
+            import wmi
+            w = wmi.WMI(namespace="root\\OpenHardwareMonitor")
+            sensors = w.Sensor()
+            sensor_count = len(sensors)
+            ohm_running = sensor_count > 0
+        except:
+            pass
+        
+        if ohm_running:
+            st.success(f"✅ Running ({sensor_count} sensors)")
+        else:
+            st.info("⚠️ Not running")
+            st.caption("[Download](https://openhardwaremonitor.org/)")
     
     st.divider()
     
