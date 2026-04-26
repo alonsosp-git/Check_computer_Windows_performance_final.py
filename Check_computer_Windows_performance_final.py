@@ -1247,6 +1247,41 @@ st.markdown(f"""
     div[data-testid="stMetricValue"] {{
         font-size: 28px;
     }}
+    
+    /* ── HORIZONTAL SCROLLBAR FOR TABS ── */
+    /* Make tabs container scrollable */
+    div[data-baseweb="tab-list"] {{
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        white-space: nowrap !important;
+        scrollbar-width: thin;
+        scrollbar-color: #888 #f1f1f1;
+    }}
+    
+    /* Style the scrollbar for webkit browsers (Chrome, Edge, Safari) */
+    div[data-baseweb="tab-list"]::-webkit-scrollbar {{
+        height: 8px;
+    }}
+    
+    div[data-baseweb="tab-list"]::-webkit-scrollbar-track {{
+        background: #f1f1f1;
+        border-radius: 4px;
+    }}
+    
+    div[data-baseweb="tab-list"]::-webkit-scrollbar-thumb {{
+        background: #888;
+        border-radius: 4px;
+    }}
+    
+    div[data-baseweb="tab-list"]::-webkit-scrollbar-thumb:hover {{
+        background: #555;
+    }}
+    
+    /* Ensure tabs don't wrap */
+    div[data-baseweb="tab-list"] button {{
+        flex-shrink: 0 !important;
+    }}
+    
     /* ── SELECTED THEME ── */
     {_chosen_css}
 </style>
